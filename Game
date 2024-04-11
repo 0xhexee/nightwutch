@@ -1,0 +1,46 @@
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract GameContract is ERC721, Ownable, ReentrancyGuard {
+    using Counters for Counters.Counter;
+    Counters.Counter private _tokenIds;
+
+    IERC20 public cruwToken;
+    uint256 public constant EPOCH_DURATION = 24 hours;
+    uint256 public lastEpochTime;
+    uint256 public tokenGenerationLimit = 100;
+    
+    constructor(address _cruwToken) ERC721("MIGHTWULKER", "MIGHT") {
+        cruwToken = IERC20(_cruwToken);
+        lastEpochTime = block.timestamp;
+    }
+
+    function mintToken() public nonReentrant {
+        require(block.timestamp >= lastEpochTime + EPOCH_DURATION, "New epoch has not started yet");
+        require(_tokenIds.current() < tokenGenerationLimit, "Generation limit reached for this epoch");
+        
+        _tokenIds.increment();
+        uint256 newItemId = _tokenIds.current();
+        _mint(msg.sender, newItemId);
+        
+        if (_tokenIds.current() == tokenGenerationLimit) {
+            lastEpochTime = block.timestamp;
+            _tokenIds.reset(); // Resets the counter for the next epoch
+        }
+    }
+
+    function burnToken(uint256 tokenId) public nonReentrant {
+        require(ownerOf(tokenId) == msg.sender, "Caller is not the token owner");
+        require(cruwToken.transferFrom(msg.sender, address(this), 100), "Failed to transfer CRUW tokens");
+
+        _burn(tokenId);
+        // Reward logic here
+    }
+
+    // Optional: Add reward logic or other game mechanics as necessary
+}
