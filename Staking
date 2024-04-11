@@ -1,0 +1,56 @@
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract StakingVault is ReentrancyGuard {
+    IERC20 public nightwutchToken;
+    ERC20 public cruwToken;
+    uint256 public epochDuration = 24 hours;
+    uint256 public lastUpdateTime;
+    uint256 public rewardRate = 10000;
+    uint256 public totalStaked;
+    mapping(address => uint256) public stakes;
+
+    constructor(address _nightwutchToken, address _cruwToken) {
+        nightwutchToken = IERC20(_nightwutchToken);
+        cruwToken = ERC20(_cruwToken);
+        lastUpdateTime = block.timestamp;
+    }
+
+    function stake(uint256 amount) external nonReentrant {
+        require(nightwutchToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        stakes[msg.sender] += amount;
+        totalStaked += amount;
+        updateRewards();
+    }
+
+    function unstake(uint256 amount) external nonReentrant {
+        require(stakes[msg.sender] >= amount, "Insufficient balance");
+        stakes[msg.sender] -= amount;
+        totalStaked -= amount;
+        nightwutchToken.transfer(msg.sender, amount);
+        updateRewards();
+    }
+
+    function updateRewards() public {
+        if (block.timestamp >= lastUpdateTime + epochDuration) {
+            if (totalStaked > 0) {
+                uint256 reward = rewardRate * (block.timestamp - lastUpdateTime) / epochDuration;
+                cruwToken.mint(address(this), reward);
+                distributeRewards(reward);
+            }
+            lastUpdateTime = block.timestamp;
+        }
+    }
+
+    function distributeRewards(uint256 reward) private {
+        for (uint256 i = 0; i < stakes.length; i++) {
+            address staker = stakes[i];
+            uint256 stakeAmount = stakes[staker];
+            uint256 stakerReward = reward * stakeAmount / totalStaked;
+            cruwToken.transfer(staker, stakerReward);
+        }
+    }
+}
